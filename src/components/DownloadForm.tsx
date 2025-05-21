@@ -18,8 +18,8 @@ const DownloadForm: React.FC = () => {
     setIsValid(url === '' || isValidReelsUrl(url));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
     if (!reelsUrl.trim()) {
       toast.error('Please enter an Instagram Reels URL');
@@ -39,12 +39,13 @@ const DownloadForm: React.FC = () => {
       
       if (result.success) {
         toast.success(result.message);
-        triggerDownload();
+        triggerDownload(result.filename, result.videoData);
       } else {
         toast.error(result.message);
       }
     } catch (error) {
       toast.error('An error occurred while downloading. Please try again.');
+      console.error('Download error:', error);
     } finally {
       setIsLoading(false);
     }
