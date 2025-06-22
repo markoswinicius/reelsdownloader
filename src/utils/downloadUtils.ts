@@ -1,5 +1,5 @@
 
-// Instagram Reels downloader utility functions
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Validates if the provided URL is a valid Instagram Reels URL
@@ -14,14 +14,6 @@ export const isValidReelsUrl = (url: string): boolean => {
 };
 
 /**
- * Extract Reels ID from URL
- */
-const extractReelsId = (url: string): string | null => {
-  const match = url.match(/instagram\.com\/(reel|reels|p)\/([A-Za-z0-9_-]+)/i);
-  return match ? match[2] : null;
-};
-
-/**
  * Interface for download result
  */
 interface DownloadResult {
@@ -32,66 +24,52 @@ interface DownloadResult {
 }
 
 /**
- * Download Reels video using a proxy API
+ * Download Reels video using Supabase Edge Function
  */
 export const downloadReels = async (url: string): Promise<DownloadResult> => {
   try {
-    const reelsId = extractReelsId(url);
+    console.log('Calling Edge Function to download Reel:', url);
     
-    if (!reelsId) {
-      return {
-        success: false,
-        message: 'Could not extract the Reels ID from the provided URL.'
-      };
-    }
-
-    // For this implementation, we're using the RapidAPI Instagram downloader
-    // Note: In a real app, this API call would be made from a backend service
-    // to protect your API key. This is for demonstration purposes only.
-    const apiUrl = `https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index`;
-    
-    const response = await fetch(`${apiUrl}?url=${encodeURIComponent(url)}`, {
-      method: 'GET',
-      headers: {
-        'X-RapidAPI-Key': 'RAPID_API_KEY_HERE', // This should be in a secure backend in a real app
-        'X-RapidAPI-Host': 'instagram-downloader-download-instagram-videos-stories.p.rapidapi.com'
-      }
+    const { data, error } = await supabase.functions.invoke('download-instagram-reel', {
+      body: { url }
     });
 
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.error) {
+    if (error) {
+      console.error('Edge Function error:', error);
       return {
         success: false,
-        message: data.error || 'Failed to download the Reels video.'
+        message: 'Failed to process the request. Please try again.'
       };
     }
-    
-    // In this demo we assume the API returns a video URL that we can fetch
-    if (data.media && data.media[0] && data.media[0].url) {
-      // Fetch the actual video file
-      const videoResponse = await fetch(data.media[0].url);
+
+    if (!data.success) {
+      return {
+        success: false,
+        message: data.message || 'Failed to download the Reels video.'
+      };
+    }
+
+    // Fetch the actual video file from the URL provided by the API
+    if (data.videoUrl) {
+      console.log('Fetching video from URL:', data.videoUrl);
+      
+      const videoResponse = await fetch(data.videoUrl);
       if (!videoResponse.ok) {
         throw new Error('Failed to fetch the video file');
       }
       
       const videoBlob = await videoResponse.blob();
-      const filename = `instagram-reel-${reelsId}.mp4`;
       
       return {
         success: true,
-        message: 'Reel downloaded successfully!',
-        filename: filename,
+        message: data.message,
+        filename: data.filename,
         videoData: videoBlob
       };
     } else {
       return {
         success: false,
-        message: 'No video URL found in the API response.'
+        message: 'No video URL received from the server.'
       };
     }
     
@@ -109,13 +87,9 @@ export const downloadReels = async (url: string): Promise<DownloadResult> => {
  */
 export const triggerDownload = (fileName: string = 'instagram-reel.mp4', blobData?: Blob): void => {
   try {
-    // For the demo, if no blob is provided, use a placeholder
     if (!blobData) {
-      console.log(`No blob data provided for download of ${fileName}, using placeholder`);
-      
-      // This is just for demonstration - in a real app, we'd always have the blob
-      const placeholderText = 'This is a placeholder for the video download.';
-      blobData = new Blob([placeholderText], { type: 'text/plain' });
+      console.error('No blob data provided for download');
+      return;
     }
     
     // Create a blob URL from the video data
@@ -144,33 +118,9 @@ export const triggerDownload = (fileName: string = 'instagram-reel.mp4', blobDat
 };
 
 /**
- * Alternative implementation for serverless environment
- * Note: In a real production app, we'd implement a proxy server or
- * use edge functions to safely make the API call without exposing API keys.
+ * Alternative implementation for serverless environment (kept for backwards compatibility)
  */
 export const downloadReelsServerless = async (url: string): Promise<DownloadResult> => {
-  // For demo purposes, this would be implemented in an actual serverless function
-  // Currently falls back to the mock implementation
-  
-  console.log('Using serverless fallback for Reels download (mock)');
-  
-  return new Promise((resolve) => {
-    // Simulate network delay
-    setTimeout(() => {
-      if (isValidReelsUrl(url)) {
-        // Simulate download success
-        resolve({
-          success: true,
-          message: 'Download successful! The video has been saved to your device.',
-          filename: 'instagram-reel-demo.mp4'
-        });
-      } else {
-        // Simulate error
-        resolve({
-          success: false,
-          message: 'Invalid Instagram Reels URL. Please check and try again.'
-        });
-      }
-    }, 2000); // Simulate 2 second delay
-  });
+  console.log('Using serverless fallback - this should not be called anymore');
+  return downloadReels(url);
 };
